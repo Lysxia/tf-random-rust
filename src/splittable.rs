@@ -1,16 +1,17 @@
 extern crate rand;
 
 use std;
-use std::num;
+use std::num::Int;
 use std::mem;
 use rand::Rng;
 use tf;
 
 pub trait Splittable {
     fn split(&mut self) -> Self;
+    fn splitn(&mut self, n: usize) -> Vec<Self>;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct RawGen {
     key: tf::Block,
     level: u64,
@@ -36,7 +37,7 @@ impl RawGen {
     pub fn g_next(&mut self) -> tf::Block {
         let blk = self.hash();
         self.level += 1;
-        if self.level == <u64 as num::Int>::max_value() {
+        if self.level == <u64 as Int>::max_value() {
             if (self.p_index as usize) < std::u64::BITS {
                 self.level = 0;
                 self.position |= 1 << self.p_index;
@@ -53,7 +54,7 @@ impl RawGen {
 
 impl Splittable for RawGen {
     fn split(&mut self) -> Self {
-        if self.p_index < 64 {
+        if (self.p_index as usize) < std::u64::BITS {
             let pi = self.p_index;
             self.p_index += 1;
             let mut right = self.clone();
@@ -69,9 +70,25 @@ impl Splittable for RawGen {
             right
         }
     }
+
+    fn splitn(&mut self, n: usize) -> Vec<Self> {
+        let x = (n as u64).leading_zeros() as u16;
+        if x < self.p_index {
+            self.key = self.hash();
+            self.level = 0;
+            self.position = 0;
+            self.p_index = 0;
+        }
+        let pi = self.p_index;
+        self.p_index += (std::u64::BITS as u16) - x;
+        (1..n as u64).map(|i| {
+            let mut right = self.clone();
+            right.position |= i << pi;
+            right }).collect()
+    }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Gen {
     gen: RawGen,
     b_index: u16,
@@ -80,8 +97,12 @@ pub struct Gen {
 
 impl Gen {
     pub fn new(seed: tf::Block) -> Self {
+        Gen::from_raw(RawGen::new(seed))
+    }
+
+    fn from_raw(raw: RawGen) -> Self {
         Gen {
-            gen: RawGen::new(seed),
+            gen: raw,
             b_index: 8,
             block: [0; 8],
         }
@@ -111,12 +132,11 @@ impl Rng for Gen {
 
 impl Splittable for Gen {
     fn split(&mut self) -> Self {
-        let right = self.gen.split();
-        Gen {
-            gen: right,
-            b_index: 8,
-            block: [0; 8],
-        }
+        Gen::from_raw(self.gen.split())
+    }
+
+    fn splitn(&mut self, n: usize) -> Vec<Self> {
+        self.gen.splitn(n).into_iter().map(Gen::from_raw).collect()
     }
 }
 
