@@ -1,0 +1,9 @@
+[package]
+
+name = "tf-random-rust"
+version = "0.0.1"
+authors = ["Lysxia <li-yao.xia@ens.fr>"]
+links = "tf"
+build = "build.rs"
+
+[build-dependencies.gcc]
