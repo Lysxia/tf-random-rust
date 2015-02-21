@@ -7,3 +7,6 @@ links = "tf"
 build = "build.rs"
 
 [build-dependencies.gcc]
+
+[dependencies]
+rand = "0.1.*"

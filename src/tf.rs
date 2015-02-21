@@ -22,7 +22,7 @@ pub fn tf256_hash(key: &Block, s: &[u8]) -> Block {
     let mut k = key.clone();
     for c in s.chunks(32) {
         let mut buff = [0; 32];
-        let c = if c.len() == 32 { c } else { buff.clone_from_slice(c); &buff[] };
+        let c = if c.len() == 32 { c } else { buff.clone_from_slice(c); &buff[..] };
         let mut crypt: Block = unsafe { mem::uninitialized() };
         unsafe {
             Threefish_256_Process_Block(

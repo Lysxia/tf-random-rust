@@ -1,21 +1,21 @@
+extern crate rand;
+
 use std;
 use std::num;
 use std::mem;
+use rand::Rng;
 use tf;
 
+pub trait Splittable {
+    fn split(&mut self) -> Self;
+}
+
 #[derive(Clone)]
-pub struct Gen {
+pub struct RawGen {
     key: tf::Block,
     level: u64,
     position: u64,
     p_index: u16,
-}
-
-#[derive(Clone)]
-pub struct GenU32 {
-    gen: Gen,
-    b_index: u16,
-    block: [u32; 8],
 }
 
 fn hash_block(key: &tf::Block, lvl: u64, pos:u64) -> tf::Block {
@@ -23,9 +23,9 @@ fn hash_block(key: &tf::Block, lvl: u64, pos:u64) -> tf::Block {
     tf::tf256_process_block(key, &blk)
 }
 
-impl Gen {
+impl RawGen {
     pub fn new(seed: tf::Block) -> Self {
-        Gen {
+        RawGen {
             key: seed,
             level: 0,
             position: 0,
@@ -33,7 +33,7 @@ impl Gen {
         }
     }
 
-    pub fn next(&mut self) -> tf::Block {
+    pub fn g_next(&mut self) -> tf::Block {
         let blk = self.hash();
         self.level += 1;
         if self.level == <u64 as num::Int>::max_value() {
@@ -41,12 +41,18 @@ impl Gen {
                 self.level = 0;
                 self.position |= 1 << self.p_index;
                 self.p_index += 1;
-            } else { *self = Gen::new(self.hash()); }
+            } else { *self = RawGen::new(self.hash()); }
         }
         blk
     }
 
-    pub fn split(&mut self) -> Self {
+    fn hash(&self) -> tf::Block {
+        hash_block(&self.key, self.level, self.position)
+    }
+}
+
+impl Splittable for RawGen {
+    fn split(&mut self) -> Self {
         if self.p_index < 64 {
             let pi = self.p_index;
             self.p_index += 1;
@@ -63,26 +69,31 @@ impl Gen {
             right
         }
     }
-
-    fn hash(&self) -> tf::Block {
-        hash_block(&self.key, self.level, self.position)
-    }
 }
 
-impl GenU32 {
+#[derive(Clone)]
+pub struct Gen {
+    gen: RawGen,
+    b_index: u16,
+    block: [u32; 8],
+}
+
+impl Gen {
     pub fn new(seed: tf::Block) -> Self {
-        GenU32 {
-            gen: Gen::new(seed),
+        Gen {
+            gen: RawGen::new(seed),
             b_index: 8,
             block: [0; 8],
         }
     }
+}
 
-    pub fn next(&mut self) -> u32 {
+impl Rng for Gen {
+    fn next_u32(&mut self) -> u32 {
         let i =
             if self.b_index == 8 {
                 self.b_index = 1;
-                self.block = unsafe { mem::transmute(self.gen.next()) };
+                self.block = unsafe { mem::transmute(self.gen.g_next()) };
                 0
             } else {
                 self.b_index += 1;
@@ -91,12 +102,21 @@ impl GenU32 {
         self.block[i]
     }
 
-    pub fn split(&mut self) -> Self {
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        for c in dest.chunks_mut(32) {
+            c.clone_from_slice(&self.gen.g_next());
+        }
+    }
+}
+
+impl Splittable for Gen {
+    fn split(&mut self) -> Self {
         let right = self.gen.split();
-        GenU32 {
+        Gen {
             gen: right,
             b_index: 8,
             block: [0; 8],
         }
     }
 }
+
