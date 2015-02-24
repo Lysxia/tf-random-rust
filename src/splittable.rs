@@ -6,9 +6,10 @@ use std::mem;
 use rand::Rng;
 use tf;
 
-pub trait Splittable {
+pub trait Splittable where <Self as Splittable>::Iter : Iterator<Item=Self> {
+    type Iter;
     fn split(&mut self) -> Self;
-    fn splitn(&mut self, n: usize) -> Vec<Self>;
+    fn splitn(&mut self, n: usize) -> <Self as Splittable>::Iter;
 }
 
 #[derive(Clone, Debug)]
@@ -52,7 +53,27 @@ impl RawGen {
     }
 }
 
+struct RawGenIter {
+    raw_gen: RawGen,
+    shift: usize,
+    n: u64,
+}
+
+impl Iterator for RawGenIter {
+    type Item = RawGen;
+    fn next(&mut self) -> Option<<Self as Iterator>::Item> {
+        if self.n == 0 { None } else {
+          let mut right = self.raw_gen.clone();
+          right.position |= self.n << self.shift;
+          self.n -= 1;
+          Some(right)
+        }
+    }
+}
+
 impl Splittable for RawGen {
+    type Iter = RawGenIter;
+
     fn split(&mut self) -> Self {
         if (self.p_index as usize) < std::u64::BITS {
             let pi = self.p_index;
@@ -71,8 +92,9 @@ impl Splittable for RawGen {
         }
     }
 
-    fn splitn(&mut self, n: usize) -> Vec<Self> {
-        let x = (n as u64).leading_zeros() as u16;
+    fn splitn(&mut self, n: usize) -> <Self as Splittable>::Iter {
+        let n = n as u64;
+        let x = n.leading_zeros() as u16;
         if x < self.p_index {
             self.key = self.hash();
             self.level = 0;
@@ -81,10 +103,11 @@ impl Splittable for RawGen {
         }
         let pi = self.p_index;
         self.p_index += (std::u64::BITS as u16) - x;
-        (1..n as u64).map(|i| {
-            let mut right = self.clone();
-            right.position |= i << pi;
-            right }).collect()
+        RawGenIter {
+            raw_gen: self.clone(),
+            shift: pi as usize,
+            n: n,
+        }
     }
 }
 
@@ -130,13 +153,20 @@ impl Rng for Gen {
     }
 }
 
-impl Splittable for Gen {
-    fn split(&mut self) -> Self {
-        Gen::from_raw(self.gen.split())
-    }
+struct GenIter { raw_gen_iter: RawGenIter }
 
-    fn splitn(&mut self, n: usize) -> Vec<Self> {
-        self.gen.splitn(n).into_iter().map(Gen::from_raw).collect()
+impl Iterator for GenIter {
+    type Item = Gen;
+    fn next(&mut self) -> Option<<Self as Iterator>::Item> {
+        self.raw_gen_iter.next().map(Gen::from_raw)
+    }
+}
+
+impl Splittable for Gen {
+    type Iter = GenIter;
+    fn split(&mut self) -> Self { Gen::from_raw(self.gen.split()) }
+    fn splitn(&mut self, n: usize) -> <Self as Splittable>::Iter {
+        GenIter { raw_gen_iter: self.gen.splitn(n) }
     }
 }
 
