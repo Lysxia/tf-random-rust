@@ -6,9 +6,11 @@ use std::mem;
 use rand::Rng;
 use tf;
 
+/// Structures that can be "split".
 pub trait Splittable where <Self as Splittable>::Iter : Iterator<Item=Self> {
     type Iter;
     fn split(&mut self) -> Self;
+    /// n-way split.
     fn splitn(&mut self, n: usize) -> <Self as Splittable>::Iter;
 }
 
@@ -111,6 +113,24 @@ impl Splittable for RawGen {
     }
 }
 
+/// A splittable random generator.
+///
+/// This generator can be efficiently split with the `.split()` method,
+/// resulting in two subsequently independent generator states.
+///
+/// ```
+/// extern crate "tf-random-rust" as srand;
+/// extern crate rand;
+/// use srand::splittable::*;
+/// use rand::Rng;
+///
+/// fn main() {
+///     let mut left = Gen::new([0; 32]); // All zero seed
+///     let mut right = left.split();
+///     println!("{} {}", left.next_u32(), right.next_u32());
+/// }
+/// ```
+///
 #[derive(Clone, Debug)]
 pub struct Gen {
     gen: RawGen,
@@ -123,7 +143,7 @@ impl Gen {
         Gen::from_raw(RawGen::new(seed))
     }
 
-    fn from_raw(raw: RawGen) -> Self {
+    pub fn from_raw(raw: RawGen) -> Self {
         Gen {
             gen: raw,
             b_index: 8,
