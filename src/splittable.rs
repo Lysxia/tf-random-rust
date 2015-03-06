@@ -41,7 +41,7 @@ impl RawGen {
         let blk = self.hash();
         self.level += 1;
         if self.level == <u64 as Int>::max_value() {
-            if (self.p_index as usize) < std::u64::BITS {
+            if self.p_index < std::u64::BITS as u16 {
                 self.level = 0;
                 self.position |= 1 << self.p_index;
                 self.p_index += 1;
@@ -55,7 +55,7 @@ impl RawGen {
     }
 }
 
-struct RawGenIter {
+pub struct RawGenIter {
     raw_gen: RawGen,
     shift: usize,
     n: u64,
@@ -77,7 +77,7 @@ impl Splittable for RawGen {
     type Iter = RawGenIter;
 
     fn split(&mut self) -> Self {
-        if (self.p_index as usize) < std::u64::BITS {
+        if self.p_index < std::u64::BITS as u16 {
             let pi = self.p_index;
             self.p_index += 1;
             let mut right = self.clone();
@@ -173,7 +173,7 @@ impl Rng for Gen {
     }
 }
 
-struct GenIter { raw_gen_iter: RawGenIter }
+pub struct GenIter { raw_gen_iter: RawGenIter }
 
 impl Iterator for GenIter {
     type Item = Gen;
